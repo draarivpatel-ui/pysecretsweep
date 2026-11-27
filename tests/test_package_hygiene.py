@@ -75,7 +75,7 @@ class PackageMetadataTests(unittest.TestCase):
     def test_publish_uses_oidc_identity_permission(self):
         text = text_rel(".github/workflows/publish.yml")
         self.assertIn("id-token: write", text)
-        self.assertIn("pypa/gh-action-pypi-publish@release/v1", text)
+        self.assertIn("pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3", text)
 
     def test_publish_has_no_password_or_repository_token(self):
         text = text_rel(".github/workflows/publish.yml").lower()

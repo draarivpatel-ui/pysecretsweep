@@ -6,9 +6,13 @@ Version 1.x receives security fixes.
 
 ## Reporting a vulnerability
 
-Please use GitHub's private security advisory form on the repository. Do not open a public issue for an undisclosed vulnerability.
+Please use the private security advisory form for this repository:
 
-Include the affected version, a minimal input or command reproduction, the expected behavior, and the observed behavior. Do not include real secrets, private keys, production tokens, or personal data. Reports are acknowledged within seven days. Fixes are released as patch versions with a changelog entry.
+https://github.com/draarivpatel-ui/pysecretsweep/security/advisories/new
+
+Do not open a public issue for an undisclosed vulnerability.
+
+Include the affected version, a minimal input or command reproduction, the expected behavior, and the observed behavior. Do not include real secrets, private keys, production tokens, or personal data. Reports are acknowledged within 3 business days. Initial triage is targeted within 14 days. A fix, mitigation, or documented resolution is targeted within 90 days. Fixes are released as patch versions with a changelog entry.
 
 ## In scope
 
