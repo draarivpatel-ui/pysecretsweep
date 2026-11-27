@@ -132,6 +132,7 @@ def format_sarif(findings, **options) -> str:
         "version": "2.1.0",
         "runs": [
             {
+                "columnKind": "unicodeCodePoints",
                 "tool": {
                     "driver": {
                         "name": "pysecretsweep",

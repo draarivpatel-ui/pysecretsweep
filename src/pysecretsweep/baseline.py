@@ -13,7 +13,8 @@ from .util import fingerprint, safe_display
 def baseline_key(finding: Finding) -> str:
     """Return the stable baseline key for a redacted finding."""
 
-    return fingerprint("{}:{}:{}".format(finding.file or "", finding.detector, finding.fingerprint))
+    normalized_file = (finding.file or "").replace("\\", "/")
+    return fingerprint("{}:{}:{}".format(normalized_file, finding.detector, finding.fingerprint))
 
 
 def _finding_list(findings) -> List[Finding]:
@@ -31,11 +32,16 @@ def read_baseline(path: Union[str, os.PathLike]) -> Set[str]:
     """
 
     display = safe_display(os.fspath(path))
+    error = None
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SecretSweepError("cannot read baseline {}".format(display)) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        error = UsageError("invalid baseline JSON in {}".format(display))
+    except OSError:
+        error = SecretSweepError("cannot read baseline {}".format(display))
+    if error is not None:
+        raise error
 
     if isinstance(data, list):
         values = data
@@ -91,12 +97,16 @@ def write_baseline(path: Union[str, os.PathLike], findings) -> int:
             handle.write(payload)
         os.replace(temporary, destination)
         temporary = None
-    except OSError as exc:
-        raise SecretSweepError("cannot write baseline {}".format(safe_display(destination))) from exc
+    except OSError:
+        write_error = SecretSweepError("cannot write baseline {}".format(safe_display(destination)))
+    else:
+        write_error = None
     finally:
         if temporary:
             try:
                 os.unlink(temporary)
             except OSError:
                 pass
+    if write_error is not None:
+        raise write_error
     return len(values)

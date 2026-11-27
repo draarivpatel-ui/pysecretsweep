@@ -7,16 +7,16 @@ Reports never contain raw matched secret values. Every finding carries a masked 
 ## Security posture
 
 - Raw secret values are never written to terminal, JSON, SARIF, baseline files, or expected error output.
-- Values up to 16 characters are fully masked. Longer values expose only a bounded edge preview, never more than one quarter of the value.
-- Filesystem scans use `os.lstat` and real-path containment. Symlinks escaping the scan root are rejected, symlink loops are nonfatal, and FIFOs, devices, sockets, and other special files are never opened.
+- Values shorter than 32 characters are fully masked. Longer values expose only a bounded edge preview, never more than one quarter of the value, and leave enough characters concealed to prevent practical reconstruction from the preview and fingerprint.
+- Filesystem scans use `os.lstat`, real-path containment, `os.open`, `os.fstat`, and `O_NOFOLLOW` plus `O_NONBLOCK` where the operating system provides them. Symlinks escaping the scan root are rejected, symlink loops are nonfatal, and FIFOs, devices, sockets, and other special files are never read as regular files.
 - File content is classified by byte evidence. A NUL anywhere in the bounded file buffer or dense control bytes marks a file binary. A binary-looking extension does not hide readable text.
-- Files are capped at 1,048,576 bytes by default. Root-level `.gitignore` and `.secretsweepignore` files are capped at 1 MiB.
+- Files are capped at 1,048,576 bytes by default. Root-level `.gitignore` and `.secretsweepignore` files are capped at 1 MiB and 10,000 compiled rules in total.
 - The gitignore matcher implements `*`, `?`, character classes, globstars, anchoring, directory rules, negation, and escapes without regex backtracking.
 - Unified diff scanning parses hunks and scans only added lines with their target-file line numbers. Consecutive added lines are scanned together so multi-line PEM blocks can be detected.
-- Custom detector patterns pass a conservative static lint for backreferences, lookbehind, stacked quantifiers, overlong patterns, and repeated groups containing repeats.
+- Custom detector patterns pass a conservative static lint for backreferences, lookbehind, stacked or oversized quantifiers, overlong patterns, repeated groups containing repeats or alternation, and adjacent variable repeats with overlapping character sets.
 - Built-in scanning is designed around bounded or simple patterns and linear input-size behavior. There are no per-detector hit caps that could hide a late distinct secret.
 - Baseline files contain only deterministic hashes of file, detector, and secret fingerprint tuples. They do not contain raw secrets or direct secret fingerprints.
-- Terminal output escapes control characters in filenames and detector metadata so repository-controlled names cannot forge terminal control sequences.
+- Detector-shaped secrets found in filenames or detector metadata are redacted before structured findings are created. Terminal output also escapes control characters so repository-controlled names cannot forge terminal control sequences.
 - SARIF artifact URIs are relative POSIX paths with dot segments removed and unsafe bytes percent encoded. Absolute host paths are reduced to artifact names.
 
 ## Scope and limitations
@@ -25,14 +25,16 @@ pysecretsweep is a high-precision text scanner, not proof that a tree is clean. 
 
 Nested `.gitignore` files are outside the documented model. Only root-level `.gitignore` and `.secretsweepignore` are read. Inline suppression is textual and does not parse every host language; a string that looks like a suppression marker on the same line acts as a marker.
 
-Standard input and diff input are read into memory. Filesystem file size is capped, but callers remain responsible for resource limits on very large streams. Symlink checks are designed for a scan tree that is not concurrently modified by an attacker.
+Standard input and diff input are read into memory. Filesystem file size is capped, but callers remain responsible for resource limits on very large streams. File opening is hardened against special-file substitution and final-component symlinks, but no path-based scanner can eliminate every race in a tree concurrently modified by an attacker.
 
 SHA-256 fingerprints are deterministic so baselines are stable. For very low entropy secrets, any deterministic fingerprint is inherently offline-guessable. Fingerprints are not encryption and must not be treated as protection for a real exposed credential. Rotate exposed credentials instead of only baselining them.
 
 ## Installation
 
+The PyPI release is pending trusted-publisher registration. Until the first release is published, install directly from the public GitHub repository:
+
 ```bash
-python3 -m pip install pysecretsweep
+python3 -m pip install "git+https://github.com/draarivpatel-ui/pysecretsweep.git"
 ```
 
 For a source checkout:
@@ -154,7 +156,7 @@ PII detection is intentionally narrow. Payment card numbers must pass Luhn valid
 
 ## Test evidence and development
 
-The offline unittest suite currently contains 512 real tests covering all 36 detectors, redaction, placeholders, inline suppression, custom detector validation, gitignore behavior, symlink and special-file safety, binary detection, unified diff line mapping, baseline validation, SARIF structure, CLI exit codes, performance shapes, packaging, and repository hygiene. All 512 tests passed in the local verification run for this commit.
+The offline unittest suite currently contains 538 real tests covering all 36 detectors, redaction, placeholders, inline suppression, custom detector validation, gitignore behavior, symlink and special-file safety, binary detection, unified diff line mapping, baseline validation, SARIF structure, CLI exit codes, performance shapes, packaging, and repository hygiene. All 538 tests passed in the local verification run for this commit.
 
 Run the suite with:
 

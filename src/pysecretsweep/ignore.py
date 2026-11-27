@@ -11,6 +11,7 @@ ALWAYS_IGNORED = {
 }
 MAX_PATTERN_CHARS = 1024
 MAX_IGNORE_FILE_BYTES = 1024 * 1024
+MAX_IGNORE_RULES = 10000
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,8 @@ def compile_ignore_rules(lines: Iterable[str]) -> List[IgnoreRule]:
     for line in lines:
         rule = parse_pattern(str(line).rstrip("\r\n"))
         if rule is not None:
+            if len(rules) >= MAX_IGNORE_RULES:
+                raise ValueError("ignore files exceed {} rules".format(MAX_IGNORE_RULES))
             rules.append(rule)
     return rules
 

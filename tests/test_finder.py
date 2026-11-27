@@ -52,6 +52,18 @@ class ScanTextStructureTests(unittest.TestCase):
         self.assertEqual([1, 2], [finding.line for finding in result.findings])
         self.assertEqual([1, 6], [finding.column for finding in result.findings])
 
+    def test_cr_only_line_endings_have_correct_positions(self):
+        token = s.github_pat()
+        result = scan_text("first\rxx=" + token, detectors=["github-pat"])
+        self.assertEqual(2, result.findings[0].line)
+        self.assertEqual(4, result.findings[0].column)
+
+    def test_crlf_remains_one_line_ending(self):
+        token = s.github_pat()
+        result = scan_text("first\r\nxx=" + token, detectors=["github-pat"])
+        self.assertEqual(2, result.findings[0].line)
+        self.assertEqual(4, result.findings[0].column)
+
     def test_non_string_input_rejected(self):
         with self.assertRaises(TypeError):
             scan_text(b"bytes")
@@ -235,11 +247,12 @@ class UtilityTests(unittest.TestCase):
     def test_sixteen_character_mask_is_fully_masked(self):
         self.assertEqual("*" * 16, mask_value("a" * 16))
 
-    def test_medium_mask_exposes_two_edge_characters(self):
-        masked = mask_value("abcdefghijklmnopqrstu")
-        self.assertTrue(masked.startswith("ab"))
-        self.assertTrue(masked.endswith("tu"))
-        self.assertEqual(len(masked), 16)
+    def test_medium_mask_is_fully_masked(self):
+        value = "abcdefghijklmnopqrstu"
+        masked = mask_value(value)
+        self.assertEqual("*" * len(value), masked)
+        self.assertNotIn("ab", masked)
+        self.assertNotIn("tu", masked)
 
     def test_long_mask_exposes_four_edge_characters(self):
         value = s.high_entropy_value(48)
@@ -302,6 +315,26 @@ class PatternLintTests(unittest.TestCase):
         report = analyze_pattern("a" * 4100)
         self.assertFalse(report["safe"])
         self.assertIn("pattern too long", report["reasons"])
+
+    def test_repeatable_alternation_rejected(self):
+        for pattern in (r"(a|aa)+$", r"(?:a|aa)+$", r"(?i)(a|aa)+$"):
+            report = analyze_pattern(pattern)
+            self.assertFalse(report["safe"])
+            self.assertIn("repeated group containing alternation", report["reasons"])
+
+    def test_ambiguous_adjacent_character_repeats_rejected(self):
+        report = analyze_pattern(r"[a-z]+[a-z]+$")
+        self.assertFalse(report["safe"])
+        self.assertIn("ambiguous adjacent repeats", report["reasons"])
+
+    def test_disjoint_adjacent_repeats_allowed(self):
+        self.assertTrue(analyze_pattern(r"\s*[\"']?")["safe"])
+        self.assertTrue(analyze_pattern(r"\s+[^\s]+")["safe"])
+
+    def test_large_repeat_rejected(self):
+        report = analyze_pattern(r"a{2000}")
+        self.assertFalse(report["safe"])
+        self.assertIn("large repeat", report["reasons"])
 
     def test_all_builtin_patterns_pass_lint(self):
         import pysecretsweep.detectors as detector_module
@@ -375,6 +408,7 @@ class CustomDetectorTests(unittest.TestCase):
             scan_text(secret, detectors=["custom-bad-error"])
         self.assertNotIn(secret, str(caught.exception))
         self.assertIsNone(caught.exception.__cause__)
+        self.assertIsNone(caught.exception.__context__)
 
     def test_custom_hit_without_index_falls_back_to_find(self):
         pysecretsweep.register_detector(

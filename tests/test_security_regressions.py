@@ -159,6 +159,79 @@ class RegressionTests(unittest.TestCase):
         result = scan_text(uri, detectors=["db-uri-password"])
         self.assertEqual("***", result.findings[0].redacted)
 
+
+    def test_urlsafe_token_trailing_hyphen_is_not_truncated(self):
+        token = s.cat("s", "k", "-") + s.urlsafe(31) + "-"
+        result = scan_text(token, detectors=["openai-api-key"])
+        self.assertEqual(1, len(result.findings))
+        self.assertEqual(pysecretsweep.fingerprint(token), result.findings[0].fingerprint)
+
+    def test_fixed_urlsafe_token_trailing_hyphen_is_detected(self):
+        token = s.cat("A", "I", "z", "a") + s.urlsafe(34) + "-"
+        result = scan_text(token, detectors=["google-api-key"])
+        self.assertEqual(1, len(result.findings))
+        self.assertEqual(pysecretsweep.fingerprint(token), result.findings[0].fingerprint)
+
+    def test_small_payload_jwt_is_detected(self):
+        header = s.cat("e", "y", "J") + s.urlsafe(17)
+        token = header + ".e30." + s.urlsafe(12)
+        result = scan_text(token, detectors=["jwt-in-config"])
+        self.assertEqual(1, len(result.findings))
+        self.assertEqual(pysecretsweep.fingerprint(token), result.findings[0].fingerprint)
+
+    def test_overlong_aws_secret_is_not_truncated(self):
+        value = s.aws_secret_value() + "A"
+        result = scan_text('aws_secret_access_key = "{}"'.format(value), detectors=["aws-secret-access-key"])
+        self.assertEqual([], result.findings)
+
+    def test_overlong_datadog_key_is_not_truncated(self):
+        value = s.hex32() + "a"
+        result = scan_text('DD_API_KEY = "{}"'.format(value), detectors=["datadog-api-key"])
+        self.assertEqual([], result.findings)
+
+    def test_long_generic_assignment_fingerprint_is_complete(self):
+        value = s.high_entropy_value(220)
+        result = scan_text('api_token = "{}"'.format(value), detectors=["generic-secret-assignment"])
+        self.assertEqual(1, len(result.findings))
+        self.assertEqual(pysecretsweep.fingerprint(value), result.findings[0].fingerprint)
+
+    def test_base64_padding_does_not_create_duplicate_partial_finding(self):
+        value = s.high_entropy_value(46) + "=="
+        result = scan_text(
+            'api_token = "{}"'.format(value),
+            detectors=["generic-secret-assignment", "high-entropy-generic"],
+        )
+        self.assertEqual(1, len(result.findings))
+        self.assertEqual(pysecretsweep.fingerprint(value), result.findings[0].fingerprint)
+
+    def test_secret_shaped_filename_is_redacted_everywhere(self):
+        token = s.github_pat()
+        result = scan_text(token, filename=token + ".txt", detectors=["github-pat"])
+        rendered = repr(result) + pysecretsweep.format_terminal(result) + pysecretsweep.format_json(result) + format_sarif(result)
+        self.assertNotIn(token, rendered)
+        self.assertNotEqual(token + ".txt", result.findings[0].file)
+
+    def test_secret_shaped_skipped_filename_is_redacted(self):
+        import os
+        import tempfile
+        token = s.github_pat()
+        with tempfile.TemporaryDirectory() as root:
+            path = os.path.join(root, token + ".txt")
+            with open(path, "wb") as handle:
+                handle.write(b"abc\x00def")
+            result = pysecretsweep.scan_path(root)
+        self.assertEqual(1, len(result.skipped))
+        self.assertNotIn(token, repr(result) + pysecretsweep.format_json(result))
+
+    def test_sarif_declares_unicode_codepoint_columns(self):
+        token = s.github_pat()
+        result = scan_text("\U0001f600" + token, filename="a.txt", detectors=["github-pat"])
+        payload = json.loads(format_sarif(result))
+        run = payload["runs"][0]
+        self.assertEqual("unicodeCodePoints", run["columnKind"])
+        region = run["results"][0]["locations"][0]["physicalLocation"]["region"]
+        self.assertEqual(2, region["startColumn"])
+
     def test_control_characters_do_not_reach_terminal_output(self):
         result = scan_text(s.github_pat(), filename="bad\x1bname.txt", detectors=["github-pat"])
         rendered = pysecretsweep.format_terminal(result)

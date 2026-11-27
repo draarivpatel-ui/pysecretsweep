@@ -3,6 +3,8 @@ import stat
 import tempfile
 import unittest
 
+from pysecretsweep.scanner import _open_read_flags, _read_regular_file
+
 import _support as s
 from pysecretsweep import (
     UsageError,
@@ -267,6 +269,22 @@ class SpecialFileTests(unittest.TestCase):
             result = scan_path(root)
             self.assertEqual("special-file", result.skipped[0]["reason"])
             self.assertEqual(0, result.scanned_files)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "fifo support required")
+    def test_low_level_fifo_open_returns_special_without_blocking(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = os.path.join(root, "pipe")
+            os.mkfifo(path)
+            data, reason = _read_regular_file(path, 1024)
+            self.assertIsNone(data)
+            self.assertEqual("special-file", reason)
+
+    def test_open_flags_use_available_platform_hardening(self):
+        flags = _open_read_flags()
+        self.assertTrue(flags & os.O_RDONLY == 0 or os.O_RDONLY == 0)
+        for name in ("O_BINARY", "O_NOFOLLOW", "O_NONBLOCK"):
+            if hasattr(os, name):
+                self.assertTrue(flags & getattr(os, name), name)
 
     def test_directory_reason_for_unreadable_entries_is_structured(self):
         with tempfile.TemporaryDirectory() as root:

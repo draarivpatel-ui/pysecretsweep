@@ -66,6 +66,12 @@ class PackageMetadataTests(unittest.TestCase):
     def test_ci_runs_unittest_suite(self):
         self.assertIn("PYTHONPATH=src python3 -m unittest discover -s tests", text_rel(".github/workflows/ci.yml"))
 
+    def test_ci_runs_cli_smoke_test(self):
+        self.assertIn("PYTHONPATH=src python3 -m pysecretsweep --version", text_rel(".github/workflows/ci.yml"))
+
+    def test_ci_runs_package_build_check(self):
+        self.assertIn("python3 -m build", text_rel(".github/workflows/ci.yml"))
+
     def test_publish_uses_oidc_identity_permission(self):
         text = text_rel(".github/workflows/publish.yml")
         self.assertIn("id-token: write", text)
@@ -190,6 +196,12 @@ class RepositoryHygieneTests(unittest.TestCase):
 
     def test_readme_has_no_test_count_placeholder(self):
         self.assertNotIn("TEST_COUNT", text_rel("README.md"))
+
+    def test_readme_does_not_claim_pypi_release_is_live(self):
+        text = text_rel("README.md")
+        self.assertIn("PyPI release is pending", text)
+        self.assertIn("git+https://github.com/draarivpatel-ui/pysecretsweep.git", text)
+        self.assertNotIn("python3 -m pip install pysecretsweep", text)
 
     def test_readme_documents_limitations(self):
         text = text_rel("README.md")

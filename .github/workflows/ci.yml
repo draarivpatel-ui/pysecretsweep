@@ -24,3 +24,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Run tests
         run: PYTHONPATH=src python3 -m unittest discover -s tests
+      - name: CLI smoke test
+        run: PYTHONPATH=src python3 -m pysecretsweep --version
+      - name: Install build tooling
+        run: python3 -m pip install build
+      - name: Build distributions
+        run: python3 -m build

@@ -15,7 +15,7 @@ Include the affected version, a minimal input or command reproduction, the expec
 - Raw secret values appearing in terminal, JSON, SARIF, baseline, or expected error output
 - Symlink escapes that scan files outside the scan root during a directory scan
 - Special-file handling that opens a FIFO, device, socket, or other non-regular file
-- Ignore-file handling that exceeds documented size bounds
+- Ignore-file handling that exceeds documented size or rule-count bounds
 - Git-diff line mapping errors that hide added secrets or scan removed secrets as added
 - SARIF artifact URIs that disclose absolute host paths or permit path traversal
 - Baseline validation or fingerprint behavior that stores raw secrets
@@ -28,7 +28,7 @@ Include the affected version, a minimal input or command reproduction, the expec
 - Secrets outside the documented detector model or hidden in compressed or binary formats
 - False positives in synthetic, example, or already revoked values
 - Denial of service from caller-controlled stdin or diff streams above practical memory limits
-- Scan trees concurrently modified by an attacker during a scan
+- Residual race conditions in scan trees concurrently modified by an attacker after the documented file-open hardening is accounted for
 - Vulnerabilities in applications embedding the library
 - Social engineering or physical access
 

@@ -14,11 +14,53 @@ _INLINE_IGNORE_RE = re.compile(r"(?:#|//|/\*)\s*secretsweep:ignore\b(.*)$")
 
 def _line_starts(text: str) -> List[int]:
     starts = [0]
-    index = text.find("\n")
-    while index != -1:
-        starts.append(index + 1)
-        index = text.find("\n", index + 1)
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        if char == "\r":
+            if index + 1 < length and text[index + 1] == "\n":
+                index += 2
+            else:
+                index += 1
+            starts.append(index)
+            continue
+        if char == "\n":
+            index += 1
+            starts.append(index)
+            continue
+        index += 1
     return starts
+
+
+def redact_metadata_text(text: str, detectors: Optional[Iterable[Detector]] = None) -> str:
+    """Redact detector-shaped secrets discovered in printable metadata."""
+
+    rendered = str(text)
+    if not rendered:
+        return rendered
+    pool = list(_REGISTRY)
+    seen = {detector.id for detector in pool}
+    for detector in detectors or []:
+        if detector.id not in seen:
+            pool.append(detector)
+            seen.add(detector.id)
+
+    values = []
+    for detector in pool:
+        try:
+            hits = list(detector.check(rendered) or [])
+        except Exception:
+            continue
+        for hit in hits:
+            if not isinstance(hit, dict):
+                continue
+            value = hit.get("value")
+            if isinstance(value, str) and value and not is_placeholder(value):
+                values.append(value)
+    for value in sorted(set(values), key=len, reverse=True):
+        rendered = rendered.replace(value, mask_value(value))
+    return rendered
 
 
 def _inline_suppressions(text: str, starts: Sequence[int]):
@@ -91,14 +133,27 @@ def scan_text(
     starts = _line_starts(text)
     suppressions = _inline_suppressions(text, starts) if ignore_comments else {}
     findings: List[Finding] = []
+    metadata_cache = {}
+
+    def clean_metadata(value) -> str:
+        rendered = str(value)
+        if rendered not in metadata_cache:
+            metadata_cache[rendered] = redact_metadata_text(rendered, enabled)
+        return metadata_cache[rendered]
+
+    safe_filename = redact_metadata_text(str(filename), enabled)
 
     for detector in enabled:
         if severity is not None and SEVERITY_RANK[detector.severity] < SEVERITY_RANK[severity]:
             continue
+        detector_failed = False
         try:
             hits = list(detector.check(text) or [])
-        except Exception as exc:
-            raise DetectorError("detector {} failed".format(detector.id)) from None
+        except Exception:
+            detector_failed = True
+            hits = []
+        if detector_failed:
+            raise DetectorError("detector {} failed".format(detector.id))
 
         for hit in hits:
             if not isinstance(hit, dict):
@@ -122,11 +177,11 @@ def scan_text(
             column = index - starts[line_index] + 1
             findings.append(
                 Finding(
-                    detector=detector.id,
-                    provider=detector.provider,
-                    name=detector.name,
+                    detector=clean_metadata(detector.id),
+                    provider=clean_metadata(detector.provider),
+                    name=clean_metadata(detector.name),
                     severity=detector.severity,
-                    file=str(filename),
+                    file=safe_filename,
                     line=line,
                     column=column,
                     redacted=mask_value(value),
