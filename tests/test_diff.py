@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import _support as s
 from pysecretsweep import scan_diff
@@ -80,6 +81,42 @@ class DiffParserTests(unittest.TestCase):
         )
         result = scan_diff(diff, detectors=["github-pat"])
         self.assertEqual([10, 30], [finding.line for finding in result.findings])
+
+    def test_rename_uses_target_path_and_maps_mixed_hunks(self):
+        token = s.github_pat()
+        diff = (
+            "diff --git a/old.py b/renamed.py\n"
+            "similarity index 80%\nrename from old.py\nrename to renamed.py\n"
+            "--- a/old.py\n+++ b/renamed.py\n"
+            "@@ -4,2 +4,3 @@\n context\n-removed\n+replacement\n+{}\n"
+            "@@ -20,3 +30,4 @@\n+{}\n context\n-removed\n+{}\n context\n"
+        ).format(token, token, token)
+        result = scan_diff(diff, detectors=["github-pat"])
+        self.assertEqual(
+            [("renamed.py", 6), ("renamed.py", 30), ("renamed.py", 32)],
+            [(finding.file, finding.line) for finding in result.findings],
+        )
+
+    def test_binary_diffs_do_not_scan_content(self):
+        token = s.github_pat()
+        for body in (
+            "Binary files a/{}.bin and b/{}.bin differ\n".format(token, token),
+            "GIT binary patch\nliteral 64\n{}\n\nliteral 0\nHcmV?d00001\n".format(token),
+        ):
+            with self.subTest(binary_patch=body.startswith("GIT binary patch")):
+                diff = "diff --git a/image.bin b/image.bin\nindex 1234567..7654321 100644\n" + body
+                with patch("pysecretsweep.scanner.scan_text") as scan_content:
+                    result = scan_diff(diff, detectors=["github-pat"])
+                scan_content.assert_not_called()
+                self.assertEqual([], result.findings)
+
+    def test_mode_only_diff_does_not_scan_content(self):
+        token = s.github_pat()
+        diff = "diff --git a/{0}.py b/{0}.py\nold mode 100644\nnew mode 100755\n".format(token)
+        with patch("pysecretsweep.scanner.scan_text") as scan_content:
+            result = scan_diff(diff, detectors=["github-pat"])
+        scan_content.assert_not_called()
+        self.assertEqual([], result.findings)
 
     def test_multiple_files_have_correct_names(self):
         first = s.github_pat()

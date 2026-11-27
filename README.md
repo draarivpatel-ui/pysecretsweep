@@ -156,7 +156,7 @@ PII detection is intentionally narrow. Payment card numbers must pass Luhn valid
 
 ## Test evidence and development
 
-The offline unittest suite currently contains 538 real tests covering all 36 detectors, redaction, placeholders, inline suppression, custom detector validation, gitignore behavior, symlink and special-file safety, binary detection, unified diff line mapping, baseline validation, SARIF structure, CLI exit codes, performance shapes, packaging, and repository hygiene. All 538 tests passed in the local verification run for this commit.
+The offline unittest suite currently contains 541 real tests covering all 36 detectors, redaction, placeholders, inline suppression, custom detector validation, gitignore behavior, symlink and special-file safety, binary detection, unified diff line mapping, baseline validation, SARIF structure, CLI exit codes, performance shapes, packaging, and repository hygiene. All 541 tests passed in the local verification run for this commit.
 
 Run the suite with:
 
