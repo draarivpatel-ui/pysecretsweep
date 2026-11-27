@@ -9,7 +9,7 @@ from typing import Iterable, Optional, Union
 
 from .baseline import apply_baseline, read_baseline
 from .errors import UsageError, SecretSweepError
-from .finder import scan_text
+from .finder import redact_metadata_text, scan_text
 from .ignore import is_always_ignored, is_ignored, load_ignore_files
 from .output import sort_findings
 from .types import Finding, ScanResult
@@ -51,6 +51,41 @@ def _validate_max_file_bytes(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise UsageError("max_file_bytes must be a positive integer")
     return value
+
+
+def _open_read_flags() -> int:
+    flags = os.O_RDONLY
+    for name in ("O_BINARY", "O_NOFOLLOW", "O_NONBLOCK"):
+        flags |= getattr(os, name, 0)
+    return flags
+
+
+def _read_regular_file(path: str, max_bytes: int):
+    fd = None
+    try:
+        fd = os.open(path, _open_read_flags())
+        opened_stat = os.fstat(fd)
+        if not stat.S_ISREG(opened_stat.st_mode):
+            return None, "special-file"
+        if opened_stat.st_size > max_bytes:
+            return None, "too-large"
+        chunks = []
+        remaining = max_bytes + 1
+        while remaining > 0:
+            chunk = os.read(fd, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks), None
+    except OSError:
+        return None, "unreadable-file"
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def _inside_root(root_real: str, identity: str) -> bool:
@@ -105,20 +140,27 @@ def scan_path(
 
     max_bytes = _validate_max_file_bytes(max_file_bytes)
     target = os.path.abspath(os.fspath(root))
+    root_error = None
     try:
         root_stat = os.stat(target)
     except OSError as exc:
         detail = exc.strerror or exc.__class__.__name__
-        raise SecretSweepError("cannot read {}: {}".format(safe_display(target), detail)) from exc
+        root_error = SecretSweepError("cannot read {}: {}".format(safe_display(redact_metadata_text(target)), detail))
+        root_stat = None
+    if root_error is not None:
+        raise root_error
 
     root_is_directory = stat.S_ISDIR(root_stat.st_mode)
     root_real = os.path.realpath(target)
     rules = []
     if root_is_directory:
+        ignore_error = None
         try:
             rules = load_ignore_files(target, include_gitignore=use_gitignore)
         except ValueError as exc:
-            raise SecretSweepError(str(exc)) from exc
+            ignore_error = SecretSweepError(str(exc))
+        if ignore_error is not None:
+            raise ignore_error
 
     excludes = _normal_excludes(exclude)
     findings = []
@@ -127,7 +169,7 @@ def scan_path(
     scanned_files = 0
 
     def add_skip(rel_path: str, reason: str) -> None:
-        skipped.append({"path": rel_path, "reason": reason})
+        skipped.append({"path": redact_metadata_text(rel_path), "reason": reason})
 
     def is_excluded(rel_path: str) -> bool:
         return any(rel_path == item or rel_path.startswith(item + "/") for item in excludes)
@@ -188,11 +230,9 @@ def scan_path(
         if effective_stat.st_size > max_bytes:
             add_skip(rel_path, "too-large")
             return
-        try:
-            with open(path, "rb") as handle:
-                data = handle.read(max_bytes + 1)
-        except OSError:
-            add_skip(rel_path, "unreadable-file")
+        data, open_error = _read_regular_file(identity, max_bytes)
+        if open_error is not None:
+            add_skip(rel_path, open_error)
             return
         if len(data) > max_bytes:
             add_skip(rel_path, "too-large")

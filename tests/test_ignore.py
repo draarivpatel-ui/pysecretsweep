@@ -4,6 +4,7 @@ import unittest
 
 from pysecretsweep.ignore import (
     MAX_IGNORE_FILE_BYTES,
+    MAX_IGNORE_RULES,
     compile_ignore_rules,
     is_always_ignored,
     is_ignored,
@@ -136,6 +137,15 @@ class IgnoreParsingTests(unittest.TestCase):
 
     def test_globstar_middle_matches_many_components(self):
         self.assertTrue(match_parts(("foo", "**", "bar"), ("foo", "a", "b", "bar")))
+
+    def test_rule_count_cap_rejects_memory_expansion(self):
+        lines = ["rule{}.txt".format(index) for index in range(MAX_IGNORE_RULES + 1)]
+        with self.assertRaises(ValueError):
+            compile_ignore_rules(lines)
+
+    def test_rule_count_cap_boundary_is_accepted(self):
+        lines = ["rule{}.txt".format(index) for index in range(MAX_IGNORE_RULES)]
+        self.assertEqual(MAX_IGNORE_RULES, len(compile_ignore_rules(lines)))
 
     def test_always_ignore_names(self):
         for name in (".git", "node_modules", "__pycache__", ".venv", "dist"):

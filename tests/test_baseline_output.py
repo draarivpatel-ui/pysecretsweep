@@ -44,6 +44,12 @@ class BaselineTests(unittest.TestCase):
         second = scan_text(token, filename="b.txt", detectors=["github-pat"]).findings[0]
         self.assertNotEqual(baseline_key(first), baseline_key(second))
 
+    def test_baseline_key_normalizes_windows_separators(self):
+        token = s.github_pat()
+        posix = scan_text(token, filename="dir/file.txt", detectors=["github-pat"]).findings[0]
+        windows = scan_text(token, filename="dir\\file.txt", detectors=["github-pat"]).findings[0]
+        self.assertEqual(baseline_key(posix), baseline_key(windows))
+
     def test_baseline_roundtrip_suppresses(self):
         result, _token = one_result()
         with tempfile.TemporaryDirectory() as root:
@@ -126,6 +132,15 @@ class BaselineTests(unittest.TestCase):
                 handle.write('{not json')
             with self.assertRaises(SecretSweepError):
                 read_baseline(path)
+
+    def test_invalid_json_is_usage_error_without_exception_context(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = os.path.join(root, "baseline.json")
+            with open(path, "w") as handle:
+                handle.write('{"entries": ["sensitive-marker",]}\n')
+            with self.assertRaises(UsageError) as caught:
+                read_baseline(path)
+            self.assertIsNone(caught.exception.__context__)
 
     def test_missing_baseline_rejected_cleanly(self):
         with tempfile.TemporaryDirectory() as root:
@@ -213,6 +228,10 @@ class SarifOutputTests(unittest.TestCase):
         self.assertEqual("2.1.0", payload["version"])
         self.assertEqual("https://json.schemastore.org/sarif-2.1.0.json", payload["$schema"])
         self.assertIn("runs", payload)
+
+    def test_sarif_run_declares_unicode_column_kind(self):
+        payload = json.loads(format_sarif([]))
+        self.assertEqual("unicodeCodePoints", payload["runs"][0]["columnKind"])
 
     def test_sarif_driver_rules(self):
         result, _token = one_result()

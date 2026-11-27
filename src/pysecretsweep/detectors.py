@@ -31,10 +31,15 @@ def _compile_pattern(pattern: Union[str, Pattern[str]], flags: int = 0) -> Patte
         if flags:
             raise UsageError("flags cannot be added to an already compiled pattern")
         return pattern  # type: ignore[return-value]
+    error = None
     try:
-        return re.compile(str(pattern), flags)
-    except re.error as exc:
-        raise UsageError("invalid detector pattern") from exc
+        compiled = re.compile(str(pattern), flags)
+    except re.error:
+        error = UsageError("invalid detector pattern")
+        compiled = None
+    if error is not None:
+        raise error
+    return compiled
 
 
 def register_detector(descriptor=None, **kwargs) -> Detector:
@@ -183,7 +188,7 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="aws-secret-access-key", provider="AWS", name="AWS secret access key", severity="critical",
-    pattern=r"\baws_secret_access_key\s*[:=]\s*[\"']?([A-Za-z0-9/+=]{40})[\"']?",
+    pattern=r"\baws_secret_access_key\s*[:=]\s*[\"']?([A-Za-z0-9/+=]{40})(?![A-Za-z0-9/+=])[\"']?",
     flags=re.IGNORECASE, value_group=1,
 )
 
@@ -224,32 +229,32 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="slack-token", provider="Slack", name="Slack bot or user token", severity="high",
-    pattern=r"\bxox[baprs]-[A-Za-z0-9-]{10,48}\b",
+    pattern=r"\bxox[baprs]-[A-Za-z0-9-]{10,48}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="google-api-key", provider="Google", name="Google API key", severity="high",
-    pattern=r"\bAIza[A-Za-z0-9_-]{35}\b",
+    pattern=r"\bAIza[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="google-oauth-client-secret", provider="Google", name="Google OAuth client secret", severity="high",
-    pattern=r"\bGOCSPX-[A-Za-z0-9_-]{20,}\b",
+    pattern=r"\bGOCSPX-[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="google-refresh-token", provider="Google", name="Google OAuth refresh token", severity="high",
-    pattern=r"\b1//0[A-Za-z0-9_-]{30,}\b",
+    pattern=r"\b1//0[A-Za-z0-9_-]{30,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="openai-api-key", provider="OpenAI", name="OpenAI API key", severity="critical",
-    pattern=r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b",
+    pattern=r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="anthropic-api-key", provider="Anthropic", name="Anthropic API key", severity="critical",
-    pattern=r"\bsk-ant-[A-Za-z0-9_-]{20,}\b",
+    pattern=r"\bsk-ant-[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
@@ -264,12 +269,12 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="pypi-token", provider="PyPI", name="PyPI API token", severity="high",
-    pattern=r"\bpypi-[A-Za-z0-9_-]{40,}\b",
+    pattern=r"\bpypi-[A-Za-z0-9_-]{40,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="docker-token", provider="Docker", name="Docker Hub personal access token", severity="high",
-    pattern=r"\bdckr_pat_[A-Za-z0-9_-]{20,}\b",
+    pattern=r"\bdckr_pat_[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
@@ -279,17 +284,17 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="sendgrid-api-key", provider="SendGrid", name="SendGrid API key", severity="high",
-    pattern=r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b",
+    pattern=r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="discord-bot-token", provider="Discord", name="Discord bot token", severity="high",
-    pattern=r"\b[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}\b",
+    pattern=r"\b[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="telegram-bot-token", provider="Telegram", name="Telegram bot token", severity="high",
-    pattern=r"\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}\b",
+    pattern=r"\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
@@ -304,18 +309,18 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="square-access-token", provider="Square", name="Square access token", severity="high",
-    pattern=r"\bsq0atp-[A-Za-z0-9_-]{20,}\b",
+    pattern=r"\bsq0atp-[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])",
 )
 
 create_pattern_detector(
     id="datadog-api-key", provider="Datadog", name="Datadog API key", severity="high",
-    pattern=r"\b(?:dd|datadog)[A-Za-z0-9_]{0,16}\s*[:=]\s*[\"']?([0-9a-f]{32})[\"']?",
+    pattern=r"\b(?:dd|datadog)[A-Za-z0-9_]{0,16}\s*[:=]\s*[\"']?([0-9a-f]{32})(?![0-9a-f])[\"']?",
     flags=re.IGNORECASE, value_group=1,
 )
 
 create_pattern_detector(
     id="new-relic-license-key", provider="New Relic", name="New Relic license key", severity="high",
-    pattern=r"\b(?:new_relic|newrelic|license_key)\s*[:=]\s*[\"']?([A-Za-z0-9]{32,40})[\"']?",
+    pattern=r"\b(?:new_relic|newrelic|license_key)\s*[:=]\s*[\"']?([A-Za-z0-9]{32,40})(?![A-Za-z0-9])[\"']?",
     flags=re.IGNORECASE, value_group=1,
 )
 
@@ -326,13 +331,13 @@ create_pattern_detector(
 
 create_pattern_detector(
     id="db-uri-password", provider="Database", name="Database URI with password", severity="high",
-    pattern=r"\b([a-z][a-z0-9+.-]{0,31})://([^:\s/@]{1,128}):([^@\s/]{3,512})@",
+    pattern=r"\b([a-z][a-z0-9+.-]{0,31})://([^:\s/@]{1,128}):([^@\s/]{3,})@",
     flags=re.IGNORECASE, value_group=3,
 )
 
 create_pattern_detector(
     id="jwt-in-config", provider="JWT", name="JSON Web Token in configuration", severity="medium",
-    pattern=r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b",
+    pattern=r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{1,}\.[A-Za-z0-9_-]{1,}(?![A-Za-z0-9_-])",
 )
 
 
@@ -397,7 +402,7 @@ register_detector(
 
 _ASSIGNMENT_PATTERN = re.compile(
     r"([A-Za-z0-9_.-]{0,40}(?:secret|token|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[A-Za-z0-9_.-]{0,40})"
-    r"\s*[:=]\s*[\"']?([^\s\"',;]{8,200})[\"']?",
+    r"\s*[:=]\s*[\"']?([^\s\"',;]{8,})[\"']?",
     re.IGNORECASE,
 )
 
@@ -419,7 +424,7 @@ register_detector(
 )
 
 
-_WORD_RE = re.compile(r"[A-Za-z0-9+/_-]{32,200}")
+_WORD_RE = re.compile(r"[A-Za-z0-9+/_-]{32,}={0,2}(?!=)")
 _ASSIGNED_BEFORE_RE = re.compile(r"(?:[\"'=:]|^)\s*$")
 
 
